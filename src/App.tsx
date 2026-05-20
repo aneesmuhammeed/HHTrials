@@ -63,6 +63,7 @@ function App() {
               path="/developers"
               element={showDevelopersPage ? <Developers /> : <Navigate to="/" replace />}
             />
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
 
             <Footer />
