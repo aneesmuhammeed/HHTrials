@@ -428,7 +428,30 @@ const HighlightsSection = ({ highlights }: any) => (
 );
 
 /* ── 4. ITINERARY ── */
-// Removed unused loadSvgAsBase64 function
+const loadSvgAsBase64 = async (src: string): Promise<string | null> => {
+  try {
+    const res = await fetch(src);
+    const svgText = await res.text();
+    const blob = new Blob([svgText], { type: "image/svg+xml" });
+    const url = URL.createObjectURL(blob);
+    return await new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = img.naturalWidth || 300;
+        canvas.height = img.naturalHeight || 100;
+        const ctx = canvas.getContext("2d")!;
+        ctx.drawImage(img, 0, 0);
+        URL.revokeObjectURL(url);
+        resolve(canvas.toDataURL("image/png"));
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
+      img.src = url;
+    });
+  } catch {
+    return null;
+  }
+};
 
 const downloadItineraryPDF = async (itinerary: any[], tourTitle = "Itinerary") => {
   // const logoBase64 = await loadSvgAsBase64("/hht_final_logo_send.svg");
