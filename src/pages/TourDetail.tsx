@@ -11,6 +11,7 @@ import type { HomeTour } from "../types/home";
 import { useSavedTours } from "../contexts/SavedToursContext";
 import { useAuth } from "../hooks/useAuth";
 import SEO from "../components/SEO";
+import { supabase } from "../lib/supabaseClient";
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // TOUR DATA
@@ -427,30 +428,7 @@ const HighlightsSection = ({ highlights }: any) => (
 );
 
 /* ── 4. ITINERARY ── */
-const loadSvgAsBase64 = async (src: string): Promise<string | null> => {
-  try {
-    const res = await fetch(src);
-    const svgText = await res.text();
-    const blob = new Blob([svgText], { type: "image/svg+xml" });
-    const url = URL.createObjectURL(blob);
-    return await new Promise((resolve) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        canvas.width = img.naturalWidth || 300;
-        canvas.height = img.naturalHeight || 100;
-        const ctx = canvas.getContext("2d")!;
-        ctx.drawImage(img, 0, 0);
-        URL.revokeObjectURL(url);
-        resolve(canvas.toDataURL("image/png"));
-      };
-      img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
-      img.src = url;
-    });
-  } catch {
-    return null;
-  }
-};
+// Removed unused loadSvgAsBase64 function
 
 const downloadItineraryPDF = async (itinerary: any[], tourTitle = "Itinerary") => {
   // const logoBase64 = await loadSvgAsBase64("/hht_final_logo_send.svg");
@@ -1278,8 +1256,16 @@ function groupItineraryDays(days: any[]) {
 
 
 
-const CustomizeTourModal = ({ open, onClose }: any) => {
+const CustomizeTourModal = ({ open, onClose, tourTitle }: any) => {
   const [selected, setSelected] = useState<string[]>([]);
+  const [month, setMonth] = useState("January");
+  const [people, setPeople] = useState("1");
+  const [preferences, setPreferences] = useState("");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [errorMessage, setErrorMessage] = useState("");
 
   if (!open) return null;
 
@@ -1301,6 +1287,50 @@ const CustomizeTourModal = ({ open, onClose }: any) => {
         ? prev.filter((i) => i !== item)
         : [...prev, item]
     );
+  };
+
+  const handleSubmit = async () => {
+    if (!name.trim() || !email.trim() || !phone.trim()) {
+      setStatus("error");
+      setErrorMessage("Please fill in all contact details.");
+      return;
+    }
+
+    setStatus("loading");
+    setErrorMessage("");
+
+    try {
+      const { error } = await supabase
+        .from('custom_tours')
+        .insert([{
+          tour_title: tourTitle,
+          travel_month: month,
+          number_of_people: parseInt(people),
+          itinerary_interests: selected,
+          additional_preferences: preferences,
+          full_name: name,
+          email: email,
+          phone: phone
+        }]);
+
+      if (error) throw error;
+
+      setStatus("success");
+      // Optional: auto-close after success
+      setTimeout(() => {
+        onClose();
+        setStatus("idle");
+        setSelected([]);
+        setPreferences("");
+        setName("");
+        setEmail("");
+        setPhone("");
+      }, 3000);
+    } catch (err: any) {
+      console.error(err);
+      setStatus("error");
+      setErrorMessage("Failed to submit request. Please try again.");
+    }
   };
 
   return (
@@ -1360,6 +1390,8 @@ const CustomizeTourModal = ({ open, onClose }: any) => {
               </label>
 
               <select
+                value={month}
+                onChange={(e) => setMonth(e.target.value)}
                 className="w-full px-3 py-2 rounded-xl bg-[#e9e9e9] text-black text-[14px]"
               >
                 <option>January</option>
@@ -1383,7 +1415,11 @@ const CustomizeTourModal = ({ open, onClose }: any) => {
                 Number of People
               </label>
 
-              <select className="w-full px-3 py-2 rounded-xl bg-[#e9e9e9] text-black text-[14px]">
+              <select 
+                value={people}
+                onChange={(e) => setPeople(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl bg-[#e9e9e9] text-black text-[14px]"
+              >
                 {[...Array(10)].map((_, i) => (
                   <option key={i + 1}>{i + 1}</option>
                 ))}
@@ -1433,6 +1469,8 @@ const CustomizeTourModal = ({ open, onClose }: any) => {
           </p>
 
           <textarea
+            value={preferences}
+            onChange={(e) => setPreferences(e.target.value)}
             placeholder="Write your preferred itinerary..."
             className="w-full h-[110px] rounded-xl p-3 bg-white/5 border border-white/30 text-[#f3e9dc] text-[14px]"
           />
@@ -1456,6 +1494,8 @@ const CustomizeTourModal = ({ open, onClose }: any) => {
             </label>
 
             <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
               placeholder="Your name"
               className="w-full bg-[#e8e8e8] text-black rounded-lg px-3 py-2 text-[14px]"
             />
@@ -1468,6 +1508,9 @@ const CustomizeTourModal = ({ open, onClose }: any) => {
               </label>
 
               <input
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                type="email"
                 placeholder="your@email.com"
                 className="w-full bg-[#e8e8e8] text-black rounded-lg px-3 py-2 text-[14px]"
               />
@@ -1479,24 +1522,40 @@ const CustomizeTourModal = ({ open, onClose }: any) => {
               </label>
 
               <input
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                type="tel"
                 placeholder="+91"
                 className="w-full bg-[#e8e8e8] text-black rounded-lg px-3 py-2 text-[14px]"
               />
             </div>
           </div>
+          
+          {/* Status Messages */}
+          {status === 'error' && (
+            <p className="text-red-400 text-sm mb-4">{errorMessage}</p>
+          )}
+          {status === 'success' && (
+            <p className="text-green-400 text-sm mb-4">Request submitted successfully! Our team will contact you soon.</p>
+          )}
         </div>
 
         {/* BUTTONS */}
-        <div className="flex flex-col sm:flex-row justify-end gap-3">
+        <div className="flex flex-col sm:flex-row justify-end gap-3 mt-4">
           <button
             onClick={onClose}
-            className="px-4 py-2 rounded-lg border border-white/60 text-[#f3e9dc]"
+            disabled={status === 'loading'}
+            className="px-4 py-2 rounded-lg border border-white/60 text-[#f3e9dc] disabled:opacity-50"
           >
             Cancel
           </button>
 
-          <button className="px-4 py-2 rounded-lg bg-[#e9e9e9] text-[#2b1a0f] font-medium">
-            Request Custom Itinerary
+          <button 
+            onClick={handleSubmit}
+            disabled={status === 'loading'}
+            className="px-4 py-2 rounded-lg bg-[#e9e9e9] text-[#2b1a0f] font-medium disabled:opacity-75"
+          >
+            {status === 'loading' ? 'Submitting...' : 'Request Custom Itinerary'}
           </button>
         </div>
       </div>
@@ -1551,7 +1610,7 @@ function TourPageUI({
       <ReviewsSection reviews={reviews} />
       <RecommendedSection recommendedTours={recommendedTours} currentTitle={title} />
       <FixedCTABar onCustomize={() => setShowCustomize(true)}/>
-      <CustomizeTourModal open={showCustomize} onClose={() => setShowCustomize(false)} />
+      <CustomizeTourModal open={showCustomize} onClose={() => setShowCustomize(false)} tourTitle={title} />
     </div>
   );
 }
